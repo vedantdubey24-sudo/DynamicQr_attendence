@@ -90,5 +90,11 @@ def create_app(config_override=None):
     @app.route('/api/health')
     def health():
         return {'status': 'ok', 'service': 'attendance-system'}
+        # Import models so SQLAlchemy registers all tables
+    from app import models
+
+    # Create database tables if they do not exist
+    with app.app_context():
+        db.create_all()
 
     return app
