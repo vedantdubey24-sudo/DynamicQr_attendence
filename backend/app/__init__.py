@@ -26,10 +26,19 @@ def create_app(config_override=None):
         load_dotenv()
 
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-        'DATABASE_URL',
-        'mysql+pymysql://root:password@localhost:3306/attendance_system'
-    )
+
+    # Database configuration (PostgreSQL / Supabase support with MySQL fallback)
+    raw_db_url = os.getenv('DATABASE_URL')
+    if raw_db_url:
+        if raw_db_url.startswith('postgres://'):
+            raw_db_url = raw_db_url.replace('postgres://', 'postgresql://', 1)
+        app.config['SQLALCHEMY_DATABASE_URI'] = raw_db_url
+    else:
+        app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
+            'MYSQL_DATABASE_URL',
+            'mysql+pymysql://root:password@localhost:3306/attendance_system'
+        )
+
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'pool_recycle': 280,
