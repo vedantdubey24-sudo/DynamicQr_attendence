@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -64,7 +64,7 @@ export const authApi = {
   checkEmail: (data) => api.post('/auth/teacher/check-email', data),
   sendOTP: (data) => api.post('/auth/send-otp', data),
   verifyOTP: (data) => api.post('/auth/verify-otp', data),
-  registerTeacher: (data) => api.post('/auth/register/teacher', data),
+  registerTeacher: (data, config = {}) => api.post('/auth/register/teacher', data, config),
   loginWithCode: (data) => api.post('/auth/login/code', data),
   logout: () => api.post('/auth/logout'),
   recoverySendOTP: (data) => api.post('/auth/recovery/send-otp', data),

@@ -18,7 +18,6 @@ import {
   Briefcase,
 } from 'lucide-react';
 import { authApi } from '../services/api';
-import axios from 'axios';
 import AssignmentBuilder from '../components/AssignmentBuilder';
 import { DEPARTMENTS, DESIGNATIONS } from '../constants/catalogue';
 
@@ -186,8 +185,7 @@ export default function TeacherRegister() {
 
     setLoading(true);
     try {
-      const response = await axios.post(
-        '/api/auth/register/teacher',
+      const response = await authApi.registerTeacher(
         {
           full_name: profile.fullName.trim(),
           department: profile.department.trim(),
