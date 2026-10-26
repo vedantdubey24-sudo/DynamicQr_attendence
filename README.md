@@ -1,0 +1,1 @@
+# DynamicQr_attendence
