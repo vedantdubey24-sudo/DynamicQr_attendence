@@ -51,9 +51,9 @@ def create_app(config_override=None):
     app.config['JWT_TOKEN_LOCATION'] = ['headers']
 
     # SMTP configuration
-    app.config['GMAIL_ADDRESS'] = os.getenv('GMAIL_ADDRESS', '')
-    app.config['GMAIL_APP_PASSWORD'] = os.getenv('GMAIL_APP_PASSWORD', '')
-    app.config['SMTP_HOST'] = os.getenv('SMTP_HOST', 'smtp.gmail.com')
+    app.config['GMAIL_ADDRESS'] = os.getenv('GMAIL_ADDRESS', '').strip()
+    app.config['GMAIL_APP_PASSWORD'] = os.getenv('GMAIL_APP_PASSWORD', '').strip()
+    app.config['SMTP_HOST'] = os.getenv('SMTP_HOST', 'smtp.gmail.com').strip()
     app.config['SMTP_PORT'] = int(os.getenv('SMTP_PORT', 587))
 
     # OTP configuration
