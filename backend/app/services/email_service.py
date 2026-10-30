@@ -1,18 +1,67 @@
 """
-Email Service — Resend HTTPS API for OTP delivery and notifications.
+Email Service — Resend HTTPS API & Gmail SMTP for OTP delivery and notifications.
 """
 
 from typing import Optional
 from flask import current_app
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import resend
 from resend.exceptions import ResendError
 
 
 class EmailService:
-    """Send transactional emails using Resend HTTPS API."""
+    """Send transactional emails using Resend HTTPS API with SMTP fallback."""
 
     DEFAULT_FROM = "QR Attendance System <onboarding@resend.dev>"
 
+    @classmethod
+    def _send_via_smtp(
+        cls,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        text_content: Optional[str] = None
+    ) -> bool:
+        """
+        Send an email via configured SMTP (e.g. Gmail).
+        Returns True on success, False on failure.
+        """
+        gmail_address = current_app.config.get('GMAIL_ADDRESS')
+        gmail_password = current_app.config.get('GMAIL_APP_PASSWORD')
+        smtp_host = current_app.config.get('SMTP_HOST', 'smtp.gmail.com')
+        smtp_port = current_app.config.get('SMTP_PORT', 587)
+
+        if not (gmail_address and gmail_password):
+            current_app.logger.warning("SMTP delivery skipped: GMAIL_ADDRESS or GMAIL_APP_PASSWORD not configured.")
+            return False
+
+        try:
+            cleaned_pwd = str(gmail_password).replace(' ', '').strip()
+
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = subject
+            msg['From'] = f"QR Attendance System <{gmail_address}>"
+            msg['To'] = to_email
+
+            if text_content:
+                msg.attach(MIMEText(text_content, 'plain'))
+            if html_content:
+                msg.attach(MIMEText(html_content, 'html'))
+
+            with smtplib.SMTP(smtp_host, int(smtp_port), timeout=10) as server:
+                server.starttls()
+                server.login(gmail_address, cleaned_pwd)
+                server.sendmail(gmail_address, [to_email], msg.as_string())
+
+            current_app.logger.info(f"Email successfully sent via SMTP to {to_email}")
+            return True
+        except Exception as e:
+            current_app.logger.error(f"SMTP error sending email to {to_email}: {type(e).__name__} - {str(e)}")
+            return False
+
+    
     @classmethod
     def _send_email(
         cls,
@@ -22,43 +71,75 @@ class EmailService:
         text_content: Optional[str] = None
     ) -> bool:
         """
-        Internal helper to send an email via Resend's HTTPS API.
-        Returns True on success, False on failure.
-        Never logs sensitive content (OTPs, login codes, API keys).
+        Send through Resend when configured.
+        SMTP is used only when Resend is not configured,
+        such as during local development.
         """
         api_key = current_app.config.get('RESEND_API_KEY')
-        if not api_key:
-            current_app.logger.error("Email delivery failed: RESEND_API_KEY is not configured.")
+
+        # Production: use Resend HTTPS API
+        if api_key:
+            email_from = (
+                current_app.config.get('EMAIL_FROM')
+                or cls.DEFAULT_FROM
+            )
+
+            resend.api_key = api_key
+
+            params = {
+                "from": email_from,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_content,
+            }
+
+            if text_content:
+                params["text"] = text_content
+
+            try:
+                response = resend.Emails.send(params)
+
+                email_id = (
+                    getattr(response, 'id', None)
+                    or (
+                        response.get('id')
+                        if isinstance(response, dict)
+                        else None
+                    )
+                )
+
+                if email_id:
+                    current_app.logger.info(
+                        f"Email accepted by Resend. ID: {email_id}"
+                    )
+                    return True
+
+                current_app.logger.error(
+                    "Resend did not return an email ID."
+                )
+                return False
+
+            except Exception as e:
+                current_app.logger.error(
+                    f"Resend email delivery failed: {type(e).__name__}"
+                )
+                return False
+
+        # Do not send external email during automated tests
+        if current_app.config.get('TESTING'):
             return False
 
-        email_from = current_app.config.get('EMAIL_FROM') or cls.DEFAULT_FROM
-        resend.api_key = api_key
+        # Local development fallback only
+        current_app.logger.warning(
+            "RESEND_API_KEY is missing. Trying SMTP fallback."
+        )
 
-        params = {
-            "from": email_from,
-            "to": [to_email],
-            "subject": subject,
-            "html": html_content,
-        }
-        if text_content:
-            params["text"] = text_content
-
-        try:
-            response = resend.Emails.send(params)
-            email_id = getattr(response, 'id', None) or (response.get('id') if isinstance(response, dict) else None)
-            if email_id:
-                current_app.logger.info(f"Email successfully accepted by Resend for {to_email} (ID: {email_id})")
-                return True
-
-            current_app.logger.error(f"Resend API did not return a valid message ID for recipient {to_email}")
-            return False
-
-        except ResendError as e:
-            current_app.logger.error(f"Resend API error sending email to {to_email}: {type(e).__name__} - {str(e)}")
-            return False
-        except Exception as e:
-            current_app.logger.error(f"Unexpected error sending email to {to_email}: {type(e).__name__}")
-            return False
+        return cls._send_via_smtp(
+            to_email,
+            subject,
+            html_content,
+            text_content
+        )
 
     @classmethod
     def send_otp_email(cls, to_email: str, otp: str, purpose: str) -> bool:

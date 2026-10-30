@@ -148,3 +148,30 @@ def test_send_approval_email(app):
             call_args = mock_send.call_args[0][0]
             assert call_args['to'] == ['faculty@institution.edu']
             assert 'Faculty Account Approved' in call_args['subject']
+
+
+def test_send_via_smtp_success(app):
+    with app.app_context():
+        with patch('smtplib.SMTP') as mock_smtp:
+            instance = mock_smtp.return_value.__enter__.return_value
+            result = EmailService._send_via_smtp(
+                to_email='faculty@institution.edu',
+                subject='Test Subject',
+                html_content='<p>Test HTML</p>',
+                text_content='Test Text'
+            )
+            assert result is True
+            assert instance.starttls.called
+            assert instance.login.called
+            assert instance.sendmail.called
+
+
+def test_send_via_smtp_missing_credentials(app):
+    with app.app_context():
+        with patch.dict(app.config, {'GMAIL_ADDRESS': '', 'GMAIL_APP_PASSWORD': ''}):
+            result = EmailService._send_via_smtp(
+                to_email='faculty@institution.edu',
+                subject='Test Subject',
+                html_content='<p>Test HTML</p>'
+            )
+            assert result is False
