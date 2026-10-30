@@ -5,6 +5,7 @@ Email Service — Gmail API for OTP delivery and notifications.
 
 import os
 import base64
+import logging
 from typing import Optional
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -18,6 +19,8 @@ from googleapiclient.discovery import build
 class EmailService:
     """Send transactional emails using Gmail API."""
 
+    GMAIL_SCOPE = ["https://www.googleapis.com/auth/gmail.send"]
+
     @classmethod
     def _send_email(
         cls,
@@ -26,9 +29,13 @@ class EmailService:
         html_content: str,
         text_content: Optional[str] = None
     ) -> bool:
-        """Send email using Gmail API and OAuth refresh token."""
+        """Send an email using Gmail API and an OAuth refresh token."""
 
         if current_app.config.get("TESTING"):
+            return False
+
+        if not to_email or "@" not in to_email:
+            current_app.logger.error("Invalid recipient email address.")
             return False
 
         client_id = os.getenv("GMAIL_CLIENT_ID")
@@ -43,7 +50,8 @@ class EmailService:
             gmail_address
         ]):
             current_app.logger.error(
-                "Gmail API credentials are missing."
+                "Gmail API configuration is incomplete. "
+                "Check Render environment variables."
             )
             return False
 
@@ -54,11 +62,10 @@ class EmailService:
                 token_uri="https://oauth2.googleapis.com/token",
                 client_id=client_id,
                 client_secret=client_secret,
-                scopes=[
-                    "https://www.googleapis.com/auth/gmail.send"
-                ]
+                scopes=cls.GMAIL_SCOPE
             )
 
+            # Obtain a fresh Google access token.
             credentials.refresh(Request())
 
             service = build(
@@ -89,25 +96,25 @@ class EmailService:
                 message.as_bytes()
             ).decode("utf-8")
 
-            result = service.users().messages().send(
+            response = service.users().messages().send(
                 userId="me",
                 body={"raw": raw_message}
             ).execute()
 
-            if result.get("id"):
+            if response.get("id"):
                 current_app.logger.info(
-                    f"Gmail API email sent successfully to {to_email}"
+                    "Gmail API successfully sent an email."
                 )
                 return True
 
             current_app.logger.error(
-                "Gmail API did not return a message ID."
+                "Gmail API returned no message ID."
             )
             return False
 
-        except Exception as error:
-            current_app.logger.error(
-                f"Gmail API delivery failed: {type(error).__name__}"
+        except Exception:
+            current_app.logger.exception(
+                "Gmail API email delivery failed."
             )
             return False
 
@@ -118,69 +125,52 @@ class EmailService:
         otp: str,
         purpose: str
     ) -> bool:
-        """
-        Send OTP verification email.
-        Never logs the OTP value.
-        """
+        """Send OTP verification email."""
 
         purpose_label = {
             "TEACHER_REGISTRATION": "Teacher Registration",
-            "LOGIN_CODE_RECOVERY": "Login Code Recovery",
+            "LOGIN_CODE_RECOVERY": "Login Code Recovery"
         }.get(purpose, "Verification")
 
         subject = (
-            f"QR Attendance System — {purpose_label} OTP"
+            f"QR Attendance System - {purpose_label} OTP"
         )
 
         html_content = f"""
         <html>
-        <body style="font-family: 'Segoe UI', Arial, sans-serif;
-                     margin: 0; padding: 20px;
-                     background-color: #f8f9fa;">
+        <body style="font-family: Arial, sans-serif;
+                     background-color: #f8f9fa; padding: 20px;">
 
-            <div style="max-width: 480px; margin: 0 auto;
+            <div style="max-width: 480px; margin: auto;
                         background: white; border-radius: 12px;
-                        padding: 32px;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                        padding: 32px;">
 
-                <div style="text-align: center; margin-bottom: 24px;">
-                    <div style="width: 48px; height: 4px;
-                                background: #D4A347;
-                                margin: 0 auto 16px;"></div>
+                <h2 style="color: #8B1E2B; text-align: center;">
+                    {purpose_label}
+                </h2>
 
-                    <h2 style="color: #8B1E2B; margin: 0;
-                               font-size: 22px;">
-                        {purpose_label}
-                    </h2>
-                </div>
-
-                <p style="color: #333; font-size: 15px;
-                          line-height: 1.6;">
-                    Your one-time verification code is:
-                </p>
+                <p>Your one-time verification code is:</p>
 
                 <div style="text-align: center; margin: 24px 0;">
-                    <span style="display: inline-block;
-                                 background: #8B1E2B;
+                    <span style="background: #8B1E2B;
                                  color: white;
-                                 font-size: 32px;
+                                 font-size: 30px;
                                  font-weight: bold;
                                  letter-spacing: 8px;
-                                 padding: 16px 32px;
-                                 border-radius: 8px;">
+                                 padding: 16px 28px;
+                                 border-radius: 8px;
+                                 display: inline-block;">
                         {otp}
                     </span>
                 </div>
 
-                <p style="color: #666; font-size: 13px;
-                          line-height: 1.6;">
-                    This code expires in <strong>5 minutes</strong>.
-                    Do not share it with anyone.
+                <p>This code expires in 5 minutes.</p>
+
+                <p style="color: #666; font-size: 13px;">
+                    Do not share this code with anyone.
                 </p>
 
-                <hr style="border: none;
-                           border-top: 1px solid #e5e7eb;
-                           margin: 24px 0;">
+                <hr>
 
                 <p style="color: #999; font-size: 11px;
                           text-align: center;">
@@ -195,7 +185,7 @@ class EmailService:
 
         text_content = (
             f"Your {purpose_label} OTP is: {otp}. "
-            "It expires in 5 minutes."
+            "It expires in 5 minutes. Do not share it."
         )
 
         return cls._send_email(
@@ -213,65 +203,39 @@ class EmailService:
     ) -> bool:
         """Send login code email to the teacher."""
 
-        subject = (
-            "QR Attendance System — Your Login Code"
-        )
+        subject = "QR Attendance System - Your Login Code"
 
         html_content = f"""
         <html>
-        <body style="font-family: 'Segoe UI', Arial, sans-serif;
-                     margin: 0; padding: 20px;
-                     background-color: #f8f9fa;">
+        <body style="font-family: Arial, sans-serif;
+                     background-color: #f8f9fa; padding: 20px;">
 
-            <div style="max-width: 480px; margin: 0 auto;
+            <div style="max-width: 480px; margin: auto;
                         background: white; border-radius: 12px;
-                        padding: 32px;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                        padding: 32px;">
 
-                <div style="text-align: center; margin-bottom: 24px;">
-                    <div style="width: 48px; height: 4px;
-                                background: #D4A347;
-                                margin: 0 auto 16px;"></div>
+                <h2 style="color: #8B1E2B; text-align: center;">
+                    Your Login Code
+                </h2>
 
-                    <h2 style="color: #8B1E2B; margin: 0;
-                               font-size: 22px;">
-                        Your Login Code
-                    </h2>
-                </div>
-
-                <p style="color: #333; font-size: 15px;
-                          line-height: 1.6;">
-                    Your secure login code has been generated:
-                </p>
+                <p>Your login code is:</p>
 
                 <div style="text-align: center; margin: 24px 0;">
-                    <span style="display: inline-block;
-                                 background: #8B1E2B;
+                    <span style="background: #8B1E2B;
                                  color: white;
                                  font-size: 24px;
                                  font-weight: bold;
                                  letter-spacing: 4px;
-                                 padding: 16px 32px;
+                                 padding: 16px 28px;
                                  border-radius: 8px;
-                                 word-break: break-all;">
+                                 display: inline-block;">
                         {login_code}
                     </span>
                 </div>
 
-                <p style="color: #666; font-size: 13px;
-                          line-height: 1.6;">
-                    <strong>Important:</strong>
-                    Save this code securely. You will need it to log in.
-                    This code cannot be recovered — if you lose it,
-                    use the "Forgot Login Code" feature.
-                </p>
+                <p>Save this code securely.</p>
 
-                <hr style="border: none;
-                           border-top: 1px solid #e5e7eb;
-                           margin: 24px 0;">
-
-                <p style="color: #999; font-size: 11px;
-                          text-align: center;">
+                <p style="color: #666; font-size: 13px;">
                     Do not share this code with anyone.
                 </p>
 
@@ -282,7 +246,7 @@ class EmailService:
 
         text_content = (
             f"Your login code is: {login_code}. "
-            "Save this securely."
+            "Save it securely and do not share it."
         )
 
         return cls._send_email(
@@ -300,43 +264,24 @@ class EmailService:
         """Notify teacher that their login code was changed."""
 
         subject = (
-            "QR Attendance System — Login Code Changed"
+            "QR Attendance System - Login Code Changed"
         )
 
         html_content = """
         <html>
-        <body style="font-family: 'Segoe UI', Arial, sans-serif;
-                     margin: 0; padding: 20px;
-                     background-color: #f8f9fa;">
-
-            <div style="max-width: 480px; margin: 0 auto;
-                        background: white; border-radius: 12px;
-                        padding: 32px;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-
-                <div style="text-align: center; margin-bottom: 24px;">
-                    <div style="width: 48px; height: 4px;
-                                background: #D4A347;
-                                margin: 0 auto 16px;"></div>
-
-                    <h2 style="color: #8B1E2B; margin: 0;
-                               font-size: 22px;">
-                        Login Code Changed
-                    </h2>
-                </div>
-
-                <p style="color: #333; font-size: 15px;
-                          line-height: 1.6;">
-                    Your login code for the QR Attendance System
-                    has been successfully changed.
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <div style="max-width: 480px; margin: auto;
+                        background: white; padding: 32px;">
+                <h2 style="color: #8B1E2B;">
+                    Login Code Changed
+                </h2>
+                <p>
+                    Your login code has been successfully changed.
                 </p>
-
-                <p style="color: #666; font-size: 13px;
-                          line-height: 1.6;">
+                <p>
                     If you did not make this change,
-                    please contact your administrator immediately.
+                    contact your administrator.
                 </p>
-
             </div>
         </body>
         </html>
@@ -344,7 +289,7 @@ class EmailService:
 
         text_content = (
             "Your login code has been changed. "
-            "Contact admin if this was not you."
+            "Contact your administrator if this was not you."
         )
 
         return cls._send_email(
@@ -362,43 +307,25 @@ class EmailService:
         """Send faculty account approval confirmation."""
 
         subject = (
-            "QR Attendance System — Faculty Account Approved"
+            "QR Attendance System - Faculty Account Approved"
         )
 
         html_content = """
         <html>
-        <body style="font-family: 'Segoe UI', Arial, sans-serif;
-                     margin: 0; padding: 20px;
-                     background-color: #f8f9fa;">
-
-            <div style="max-width: 480px; margin: 0 auto;
-                        background: white; border-radius: 12px;
-                        padding: 32px;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-
-                <div style="text-align: center; margin-bottom: 24px;">
-                    <div style="width: 48px; height: 4px;
-                                background: #D4A347;
-                                margin: 0 auto 16px;"></div>
-
-                    <h2 style="color: #8B1E2B; margin: 0;
-                               font-size: 22px;">
-                        Account Approved
-                    </h2>
-                </div>
-
-                <p style="color: #333; font-size: 15px;
-                          line-height: 1.6;">
-                    Congratulations! Your faculty account has
-                    been reviewed and approved by the administrator.
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <div style="max-width: 480px; margin: auto;
+                        background: white; padding: 32px;">
+                <h2 style="color: #8B1E2B;">
+                    Account Approved
+                </h2>
+                <p>
+                    Your faculty account has been approved
+                    by the administrator.
                 </p>
-
-                <p style="color: #666; font-size: 13px;
-                          line-height: 1.6;">
-                    You may now sign in using your registered email
-                    and personal login code to start taking attendance.
+                <p>
+                    You can now sign in using your registered
+                    email and login code.
                 </p>
-
             </div>
         </body>
         </html>
