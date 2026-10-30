@@ -28,6 +28,8 @@ def app():
         'SQLALCHEMY_SESSION_OPTIONS': {'expire_on_commit': False},
         'JWT_SECRET_KEY': 'test-jwt-secret-with-at-least-32-bytes-length',
         'OTP_HMAC_SECRET': 'test-hmac-secret-with-at-least-32-bytes-length',
+        'RESEND_API_KEY': 're_test_mock_api_key_123',
+        'EMAIL_FROM': 'QR Attendance System <onboarding@resend.dev>',
         'GMAIL_ADDRESS': 'test@test.com',
         'GMAIL_APP_PASSWORD': 'test-password',
         'FRONTEND_URL': 'http://localhost:5173',

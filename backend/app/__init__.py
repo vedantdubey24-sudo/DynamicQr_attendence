@@ -50,7 +50,11 @@ def create_app(config_override=None):
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=2)
     app.config['JWT_TOKEN_LOCATION'] = ['headers']
 
-    # SMTP configuration
+    # Resend Email API configuration
+    app.config['RESEND_API_KEY'] = os.getenv('RESEND_API_KEY', '').strip()
+    app.config['EMAIL_FROM'] = os.getenv('EMAIL_FROM', 'QR Attendance System <onboarding@resend.dev>').strip()
+
+    # Legacy SMTP configuration fallback
     app.config['GMAIL_ADDRESS'] = os.getenv('GMAIL_ADDRESS', '').strip()
     app.config['GMAIL_APP_PASSWORD'] = os.getenv('GMAIL_APP_PASSWORD', '').strip()
     app.config['SMTP_HOST'] = os.getenv('SMTP_HOST', 'smtp.gmail.com').strip()
