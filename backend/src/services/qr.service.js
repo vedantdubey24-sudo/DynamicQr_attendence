@@ -51,15 +51,6 @@ export class QRTokenService {
       tokenExpiry = sessionExpiresAt;
     }
 
-    // Invalidate previous active tokens for this session
-    await prisma.qRToken.updateMany({
-      where: {
-        session_id: session.id,
-        is_revoked: false,
-      },
-      data: { is_revoked: true },
-    });
-
     // Generate cryptographically secure random token (32 bytes urlsafe)
     const rawToken = crypto.randomBytes(32).toString('base64url');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');

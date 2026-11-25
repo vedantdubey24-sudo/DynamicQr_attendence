@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../config/database.js';
 import { env } from '../config/environment.js';
@@ -238,9 +239,9 @@ export class AuthController {
         return res.status(409).json({ error: 'ERP ID already in use.' });
       }
 
-      // Generate 12-char urlsafe login code & bcrypt hash
-      const loginCode = crypto.randomBytes(9).toString('base64url');
-      const codeHash = await bcrypt.hash(loginCode, 10);
+      // Generate 16-char urlsafe login code (matches Flask secrets.token_urlsafe(12)) & hash
+      const loginCode = crypto.randomBytes(12).toString('base64url');
+      const codeHash = await hashPasswordOrCode(loginCode);
 
       const assignmentsData = req.body?.teaching_assignments || req.body?.assignments || [];
 
@@ -544,9 +545,9 @@ export class AuthController {
         return res.status(401).json({ error: 'Recovery token has expired. Please start over.' });
       }
 
-      // Generate new login code & hash
-      const newCode = crypto.randomBytes(9).toString('base64url');
-      const codeHash = await bcrypt.hash(newCode, 10);
+      // Generate new 16-char login code (matches Flask secrets.token_urlsafe(12)) & hash
+      const newCode = crypto.randomBytes(12).toString('base64url');
+      const codeHash = await hashPasswordOrCode(newCode);
 
       await prisma.$transaction([
         prisma.recoveryAuthorization.update({

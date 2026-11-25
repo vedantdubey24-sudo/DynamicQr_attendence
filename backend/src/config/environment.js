@@ -1,18 +1,42 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-export const env = {
-  PORT: parseInt(process.env.PORT || '5000', 10),
-  NODE_ENV: process.env.NODE_ENV || 'development',
-  DATABASE_URL: process.env.DATABASE_URL || '',
-  JWT_SECRET: process.env.JWT_SECRET || 'institution-attendance-jwt-secret-key-32bytes-long',
-  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '2h',
-  OTP_HMAC_SECRET: process.env.OTP_HMAC_SECRET || 'institution-attendance-hmac-secret-key-32bytes-long',
-  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
-  EMAIL_FROM: process.env.EMAIL_FROM || 'QR Attendance System <onboarding@resend.dev>',
-  GMAIL_ADDRESS: process.env.GMAIL_ADDRESS || '',
-  GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD || '',
-  SMTP_HOST: process.env.SMTP_HOST || 'smtp.gmail.com',
-  SMTP_PORT: parseInt(process.env.SMTP_PORT || '587', 10),
-  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
-};
+const DEV_JWT_SECRET = 'institution-attendance-jwt-secret-key-32bytes-long';
+const DEV_OTP_HMAC_SECRET = 'institution-attendance-hmac-secret-key-32bytes-long';
+
+export function buildEnvConfig(sourceEnv = process.env) {
+  const nodeEnv = sourceEnv.NODE_ENV || 'development';
+  const isProduction = nodeEnv === 'production';
+
+  const jwtSecret = sourceEnv.JWT_SECRET || sourceEnv.JWT_SECRET_KEY;
+  const otpHmacSecret = sourceEnv.OTP_HMAC_SECRET;
+
+  if (isProduction) {
+    const missing = [];
+    if (!jwtSecret) missing.push('JWT_SECRET');
+    if (!otpHmacSecret) missing.push('OTP_HMAC_SECRET');
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing required production environment variable(s): ${missing.join(', ')}. ` +
+          'Refusing to start with development fallback secrets.'
+      );
+    }
+  }
+
+  return {
+    PORT: parseInt(sourceEnv.PORT || '5000', 10),
+    NODE_ENV: nodeEnv,
+    DATABASE_URL: sourceEnv.DATABASE_URL || '',
+    JWT_SECRET: jwtSecret || DEV_JWT_SECRET,
+    JWT_EXPIRES_IN: sourceEnv.JWT_EXPIRES_IN || '2h',
+    OTP_HMAC_SECRET: otpHmacSecret || DEV_OTP_HMAC_SECRET,
+    GMAIL_ADDRESS: sourceEnv.GMAIL_ADDRESS || '',
+    GMAIL_CLIENT_ID: sourceEnv.GMAIL_CLIENT_ID || '',
+    GMAIL_CLIENT_SECRET: sourceEnv.GMAIL_CLIENT_SECRET || '',
+    GMAIL_REFRESH_TOKEN: sourceEnv.GMAIL_REFRESH_TOKEN || '',
+    FRONTEND_URL: sourceEnv.FRONTEND_URL || 'http://localhost:5173',
+  };
+}
+
+export const env = buildEnvConfig(process.env);

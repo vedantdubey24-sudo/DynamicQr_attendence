@@ -12,7 +12,7 @@ Production-ready backend developed in **JavaScript ES6+ (Node.js & Express.js)**
 - **Authentication**: JWT (`jsonwebtoken`) with Bearer tokens
 - **Password & Code Security**: `bcryptjs`
 - **OTP Verification**: Node.js built-in `crypto` (HMAC-SHA256 challenge binding)
-- **Email Service**: Resend API (`resend` SDK) with Nodemailer SMTP fallback
+- **Email Service**: Gmail API v1 via OAuth 2.0 (`googleapis`)
 - **Security & Protection**: Helmet security headers, CORS origin restrictions, express-rate-limit
 - **Validation**: Zod schema validation
 - **Testing**: Vitest + Supertest
@@ -49,7 +49,7 @@ backend/
 │   │   └── attendance.routes.js      # /api/attendance
 │   ├── services/
 │   │   ├── assignment.service.js     # Academic year normalization and assignment grouping
-│   │   ├── email.service.js          # Resend & SMTP transactional email dispatcher
+│   │   ├── email.service.js          # Gmail API (OAuth 2.0) transactional email dispatcher
 │   │   ├── otp.service.js            # Cryptographic OTP challenge creation and verification
 │   │   └── qr.service.js             # Dynamic rotating QR tokens and session expiration
 │   ├── utils/
@@ -87,15 +87,11 @@ JWT_EXPIRES_IN="2h"
 # OTP Security (HMAC-SHA256 secret)
 OTP_HMAC_SECRET="institution-attendance-hmac-secret-key-32bytes-long"
 
-# Resend API Key
-RESEND_API_KEY="re_your_api_key_here"
-EMAIL_FROM="QR Attendance System <onboarding@resend.dev>"
-
-# Optional Gmail SMTP Fallback
-GMAIL_ADDRESS="markupauth@gmail.com"
-GMAIL_APP_PASSWORD="your-app-password"
-SMTP_HOST="smtp.gmail.com"
-SMTP_PORT=587
+# Gmail API (OAuth 2.0)
+GMAIL_ADDRESS="your-sender@gmail.com"
+GMAIL_CLIENT_ID="your-google-oauth-client-id"
+GMAIL_CLIENT_SECRET="your-google-oauth-client-secret"
+GMAIL_REFRESH_TOKEN="your-google-oauth-refresh-token"
 
 # Frontend Origin for CORS
 FRONTEND_URL="http://localhost:5173"

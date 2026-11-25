@@ -274,4 +274,39 @@ describe('Dynamic QR Attendance Engine Integration', () => {
     expect(res.body.status).toBe('EXPIRED');
     expect(res.body.error).toContain('no longer active');
   });
+
+  it('5. Reset Login Code: Generates 16-character login code matching Flask secrets.token_urlsafe(12)', async () => {
+    const cryptoMod = await import('crypto');
+    const rawRecoveryToken = 'test-recovery-token-123';
+    const tokenHash = cryptoMod.createHash('sha256').update(rawRecoveryToken).digest('hex');
+
+    vi.spyOn(prisma.user, 'findFirst').mockResolvedValue({
+      id: 10,
+      email: 'teacher@test.edu',
+      role: 'TEACHER',
+      status: 'APPROVED',
+    });
+    vi.spyOn(prisma.recoveryAuthorization, 'findFirst').mockResolvedValue({
+      id: 5,
+      user_id: 10,
+      token_hash: tokenHash,
+      is_consumed: false,
+      expires_at: new Date(Date.now() + 60000),
+    });
+    vi.spyOn(prisma.recoveryAuthorization, 'update').mockReturnValue('op1');
+    vi.spyOn(prisma.loginCodeCredential, 'updateMany').mockReturnValue('op2');
+    vi.spyOn(prisma.loginCodeCredential, 'create').mockReturnValue('op3');
+    vi.spyOn(prisma, '$transaction').mockResolvedValue([]);
+    vi.spyOn(prisma.securityAuditEvent, 'create').mockResolvedValue({});
+    vi.spyOn(EmailService, 'sendLoginCodeEmail').mockResolvedValue(true);
+    vi.spyOn(EmailService, 'sendCodeChangedNotification').mockResolvedValue(true);
+
+    const res = await request(app)
+      .post('/api/auth/recovery/reset-login-code')
+      .send({ email: 'teacher@test.edu', recovery_token: rawRecoveryToken });
+
+    expect(res.status).toBe(200);
+    expect(res.body.login_code).toBeDefined();
+    expect(res.body.login_code).toHaveLength(16);
+  });
 });

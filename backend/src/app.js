@@ -12,6 +12,10 @@ import attendanceRoutes from './routes/attendance.routes.js';
 
 const app = express();
 
+// Trust exactly 1 reverse proxy hop (Render edge load balancer) so req.ip
+// and express-rate-limit use the real client IP without trusting arbitrary hops.
+app.set('trust proxy', 1);
+
 // Security Headers
 app.use(helmet());
 

@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
 export const adminLoginSchema = z.object({
-  email: z.string().email('Email is required').trim().toLowerCase(),
+  email: z.string().trim().toLowerCase().email('Email is required'),
   password: z.string().min(1, 'Password is required'),
 });
 
 export const addApprovedEmailSchema = z.object({
-  email: z.string().email('Valid email address required').trim().toLowerCase(),
+  email: z.string().trim().toLowerCase().email('Valid email address required'),
 });
 
 export const addAssignmentSchema = z.object({
