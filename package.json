@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "npm --prefix frontend run dev",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:start": "npm --prefix backend start",
+    "backend:test": "npm --prefix backend test",
     "build": "npm --prefix frontend run build",
     "lint": "npm --prefix frontend run lint",
     "preview": "npm --prefix frontend run preview"

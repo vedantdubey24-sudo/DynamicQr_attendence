@@ -1,0 +1,235 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum OtpPurpose {
+  TEACHER_REGISTRATION
+  LOGIN_CODE_RECOVERY
+}
+
+enum SessionStatus {
+  ACTIVE
+  EXPIRED
+  CLOSED
+}
+
+model User {
+  id             Int          @id @default(autoincrement())
+  email          String       @unique @db.VarChar(255)
+  role           UserRole
+  password_hash  String?      @db.VarChar(255)
+  status         UserStatus   @default(PENDING)
+  created_at     DateTime     @default(now()) @db.Timestamp(6)
+  updated_at     DateTime     @default(now()) @updatedAt @db.Timestamp(6)
+
+  // Relationships
+  profile                TeacherProfile?
+  assignments            TeacherAssignment[]
+  login_credentials      LoginCodeCredential[]
+  recovery_authorizations RecoveryAuthorization[]
+  attendance_sessions    AttendanceSession[]
+  approved_emails_created ApprovedTeacherEmail[] @relation("ApprovedEmailsCreated")
+
+  @@map("users")
+}
+
+model ApprovedTeacherEmail {
+  id         Int       @id @default(autoincrement())
+  email      String    @unique @db.VarChar(255)
+  is_used    Boolean   @default(false)
+  created_at DateTime  @default(now()) @db.Timestamp(6)
+  used_at    DateTime? @db.Timestamp(6)
+  created_by Int?
+
+  creator    User?     @relation("ApprovedEmailsCreated", fields: [created_by], references: [id])
+
+  @@map("approved_teacher_emails")
+}
+
+model Department {
+  id       Int              @id @default(autoincrement())
+  name     String           @unique @db.VarChar(255)
+  code     String?          @unique @db.VarChar(50)
+  teachers TeacherProfile[]
+
+  @@map("departments")
+}
+
+model TeacherProfile {
+  id            Int         @id @default(autoincrement())
+  user_id       Int         @unique
+  full_name     String      @db.VarChar(255)
+  department    String      @db.VarChar(255)
+  department_id Int?
+  designation   String      @db.VarChar(255)
+  staff_id      String      @unique @db.VarChar(100)
+
+  user           User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  department_rel Department? @relation(fields: [department_id], references: [id])
+
+  @@map("teacher_profiles")
+}
+
+model OTPChallenge {
+  id           Int        @id @default(autoincrement())
+  email        String     @db.VarChar(255)
+  otp_hash     String     @db.VarChar(255)
+  purpose      OtpPurpose
+  attempts     Int        @default(0)
+  max_attempts Int        @default(5)
+  expires_at   DateTime   @db.Timestamp(6)
+  is_consumed  Boolean    @default(false)
+  created_at   DateTime   @default(now()) @db.Timestamp(6)
+
+  @@index([email])
+  @@map("otp_challenges")
+}
+
+model AcademicYear {
+  id        Int       @id @default(autoincrement())
+  year_name String    @unique @db.VarChar(50)
+  is_active Boolean   @default(true)
+  classes   Class[]
+
+  @@map("academic_years")
+}
+
+model Class {
+  id               Int                 @id @default(autoincrement())
+  class_name       String              @db.VarChar(100)
+  academic_year_id Int
+
+  academic_year    AcademicYear        @relation(fields: [academic_year_id], references: [id])
+  divisions        Division[]
+  assignments      TeacherAssignment[]
+  sessions         AttendanceSession[]
+
+  @@map("classes")
+}
+
+model Division {
+  id            Int                 @id @default(autoincrement())
+  division_name String              @db.VarChar(50)
+  class_id      Int
+
+  class_        Class               @relation(fields: [class_id], references: [id])
+  assignments   TeacherAssignment[]
+  sessions      AttendanceSession[]
+
+  @@map("divisions")
+}
+
+model Subject {
+  id           Int                 @id @default(autoincrement())
+  subject_name String              @db.VarChar(255)
+  subject_code String              @unique @db.VarChar(50)
+
+  assignments  TeacherAssignment[]
+  sessions     AttendanceSession[]
+
+  @@map("subjects")
+}
+
+model TeacherAssignment {
+  id          Int      @id @default(autoincrement())
+  teacher_id  Int
+  class_id    Int
+  division_id Int
+  subject_id  Int
+
+  teacher      User     @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  class_rel    Class    @relation(fields: [class_id], references: [id])
+  division_rel Division @relation(fields: [division_id], references: [id])
+  subject_rel  Subject  @relation(fields: [subject_id], references: [id])
+
+  @@unique([teacher_id, class_id, division_id, subject_id])
+  @@map("teacher_assignments")
+}
+
+model LoginCodeCredential {
+  id         Int       @id @default(autoincrement())
+  user_id    Int
+  code_hash  String    @db.VarChar(255)
+  created_at DateTime  @default(now()) @db.Timestamp(6)
+  expires_at DateTime? @db.Timestamp(6)
+  is_revoked Boolean   @default(false)
+
+  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("login_code_credentials")
+}
+
+model RecoveryAuthorization {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  token_hash  String   @db.VarChar(255)
+  expires_at  DateTime @db.Timestamp(6)
+  is_consumed Boolean  @default(false)
+  created_at  DateTime @default(now()) @db.Timestamp(6)
+
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("recovery_authorizations")
+}
+
+model AttendanceSession {
+  id          Int           @id @default(autoincrement())
+  teacher_id  Int
+  class_id    Int
+  division_id Int
+  subject_id  Int
+  status      SessionStatus @default(ACTIVE)
+  starts_at   DateTime      @db.Timestamp(6)
+  expires_at  DateTime      @db.Timestamp(6)
+  closed_at   DateTime?     @db.Timestamp(6)
+
+  teacher      User          @relation(fields: [teacher_id], references: [id])
+  class_rel    Class         @relation(fields: [class_id], references: [id])
+  division_rel Division      @relation(fields: [division_id], references: [id])
+  subject_rel  Subject       @relation(fields: [subject_id], references: [id])
+  tokens       QRToken[]
+
+  @@map("attendance_sessions")
+}
+
+model QRToken {
+  id         Int               @id @default(autoincrement())
+  session_id Int
+  token_hash String            @db.VarChar(64)
+  issued_at  DateTime          @db.Timestamp(6)
+  expires_at DateTime          @db.Timestamp(6)
+  is_revoked Boolean           @default(false)
+
+  session    AttendanceSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@map("qr_tokens")
+}
+
+model SecurityAuditEvent {
+  id         Int      @id @default(autoincrement())
+  event_type String   @db.VarChar(100)
+  actor_id   Int?
+  ip_address String?  @db.VarChar(45)
+  details    Json?
+  created_at DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([event_type])
+  @@map("security_audit_events")
+}
