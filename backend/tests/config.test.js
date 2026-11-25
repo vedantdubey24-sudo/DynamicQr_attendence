@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
-import { buildEnvConfig } from '../src/config/environment.js';
+import {
+  buildEnvConfig,
+  sanitizeDatabaseUrl,
+  getDatabaseUrlDiagnostics,
+} from '../src/config/environment.js';
 
 describe('Production Environment Secret Validation', () => {
   it('Throws a clear error in production when JWT_SECRET is missing', () => {
@@ -69,5 +73,30 @@ describe('Render Trust Proxy & Rate Limiting', () => {
       .send({});
 
     expect(Number(resIp1Second.headers['ratelimit-remaining'])).toBe(98);
+  });
+});
+
+describe('DATABASE_URL Sanitization & Safe Diagnostics', () => {
+  it('Trims whitespace and strips surrounding quotes from DATABASE_URL', () => {
+    const cleaned = sanitizeDatabaseUrl('  "postgresql://user:secret@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres"  ');
+    expect(cleaned).toBe('postgresql://user:secret@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres');
+  });
+
+  it('Automatically appends pgbouncer=true for port 6543 Supabase transaction pooler', () => {
+    const cleaned = sanitizeDatabaseUrl('postgresql://postgres.ref:secret@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres');
+    expect(cleaned).toContain('pgbouncer=true');
+  });
+
+  it('Diagnostics report presence, protocol, and hostname without leaking credentials', () => {
+    const diag = getDatabaseUrlDiagnostics('postgresql://postgres.ref:SuperSecretPassword@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true');
+    expect(diag).toEqual({
+      present: true,
+      protocol: 'postgresql:',
+      hostname: 'aws-0-ap-southeast-2.pooler.supabase.com',
+      port: '6543',
+      pgbouncer: true,
+    });
+    expect(JSON.stringify(diag)).not.toContain('SuperSecretPassword');
+    expect(JSON.stringify(diag)).not.toContain('postgres.ref');
   });
 });
